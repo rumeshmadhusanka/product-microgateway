@@ -2,5 +2,7 @@
     image: wso2/mg-mock-backend:latest
     ports:
       - "2383:2383"
+      - "8500:8500"
+      - "8501:8501"
     links:
       - router

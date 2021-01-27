@@ -10,7 +10,7 @@ username = "admin"
 password = "admin"
 
 [adapter.consul]
-url = "https://169.254.1.1:8501" # scheme + host ip + port
+url = "https://mockBackend:8501" # scheme + host ip + port
 pollInterval = 5 # seconds
 aclTokenFilePath = ""
 # certs for tls

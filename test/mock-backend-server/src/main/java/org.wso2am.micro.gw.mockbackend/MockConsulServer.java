@@ -16,12 +16,13 @@
  * under the License.
  */
 
-package org.wso2am.micro.gw.mockconsul;
+package org.wso2am.micro.gw.mockbackend;
 
-import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpServer;
-import com.sun.net.httpserver.HttpsServer;
+import com.sun.net.httpserver.*;
 
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLParameters;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
@@ -35,9 +36,8 @@ import java.util.logging.Logger;
 /**
  * ConsulServer starts an HTTP server to mock the behaviour of a Consul Client/Server
  */
-public class ConsulServer extends Thread {
-    private static final Logger logger = Logger.getLogger(ConsulServer.class.getName());
-    private final String host; //localhost
+public class MockConsulServer extends Thread {
+    private static final Logger logger = Logger.getLogger(MockConsulServer.class.getName());
     private final int port;
     private final String scheme; //http, https
     private List<Node> nodes = new ArrayList<>(); //list of service nodes
@@ -45,8 +45,7 @@ public class ConsulServer extends Thread {
     private HttpServer httpServer;
 
 
-    public ConsulServer(String host, int port, String scheme) {
-        this.host = host;
+    public MockConsulServer(int port, String scheme) {
         this.port = port;
         this.scheme = scheme;
 
@@ -57,16 +56,11 @@ public class ConsulServer extends Thread {
         responseHeaders.put("X-Consul-Index", "101");
         responseHeaders.put("X-Consul-Knownleader", "true");
         responseHeaders.put("X-Consul-Lastcontact", "0");
-        responseHeaders.put("Date", "");//todo add date
     }
 
 
     public void addNode(Node node) {
         nodes.add(node);
-    }
-
-    public void removeNode(Node node) {
-        nodes.remove(node);
     }
 
     public void resetServer() {
@@ -271,7 +265,7 @@ public class ConsulServer extends Thread {
         jsonTemplate = jsonTemplate.replace("${serviceId}", node.getId());
         jsonTemplate = jsonTemplate.replace("${serviceName}", node.getService().getName());
         jsonTemplate = jsonTemplate.replace("${port}", Integer.toString(node.getPort()));
-        jsonTemplate = jsonTemplate.replace("${tag}", node.getTags()[0]);//todo multiple tags
+        jsonTemplate = jsonTemplate.replace("${tag}", node.getTags()[0]);
         jsonTemplate = jsonTemplate.replace("${healthStatus}", node.getHealthCheck().getStatus());
 
         return jsonTemplate;
@@ -285,57 +279,78 @@ public class ConsulServer extends Thread {
     @Override
     public void run() {
         try {
-            if (scheme.equals("https")) {
+            //localhost
+            String host = "0.0.0.0";
+            if (scheme.equals("https")) { //https
                 this.httpServer = HttpsServer.create(new InetSocketAddress(host, port), 0);
                 //todo https
-            } else {
+                SSLContext sslContext = MockBackEndServer.getSslContext();
+                ((HttpsServer) httpServer).setHttpsConfigurator(new HttpsConfigurator(sslContext) {
+                    public void configure(HttpsParameters params) {
+                        try {
+                            // initialise the SSL context
+                            SSLContext sslContext = SSLContext.getDefault();
+                            SSLEngine engine = sslContext.createSSLEngine();
+                            params.setNeedClientAuth(true);
+                            params.setCipherSuites(engine.getEnabledCipherSuites());
+                            params.setProtocols(engine.getEnabledProtocols());
+                            // get the default parameters
+                            SSLParameters defaultSSLParameters = sslContext.getDefaultSSLParameters();
+                            params.setSSLParameters(defaultSSLParameters);
+                        } catch (Exception ex) {
+                            logger.severe("Failed to create HTTPS config");
+                        }
+                    }
+                });
+            } else { //http
                 this.httpServer = HttpServer.create(new InetSocketAddress(host, port), 0);
             }
+            createContextsForHttpServer(httpServer);
 
-
-            String consulContext = "/v1/health/service/";
-            httpServer.createContext(consulContext, exchange -> {
-                System.out.println(exchange.getRequestURI());
-                Map<String, String> map = paramsAndQueryToMap(consulContext, exchange.getRequestURI().toString());
-                String serviceName = map.get("PATH_PARAM");
-                //dc=local-dc&passing=1
-                List<Node> resultNodes = get(serviceName);
-                if (map.containsKey("dc")) {
-                    String dc = map.get("dc");
-                    resultNodes = get(dc, serviceName);
-                    if (map.containsKey("passing")) {
-                        resultNodes = get(dc, serviceName, true);
-                    }
-                }
-                byte[] response = buildAllResultsToJsonArray(resultNodes).getBytes();
-//                response = phonyResponse().getBytes();
-                setHTTPResponseHeaders(exchange);
-                sendHTTPResponse(exchange, response);
-                exchange.getResponseBody().write(response);
-                exchange.close();
-
-            });
-
-            String testCasesContext = "/tc/";
-            httpServer.createContext(testCasesContext, exchange -> {
-                System.out.println(exchange.getRequestURI());
-                Map<String, String> map = paramsAndQueryToMap(testCasesContext, exchange.getRequestURI().toString());
-                String testCase = map.get("PATH_PARAM");
-                //call methods to change consul server state
-                resetServer(); //reset the state before loading a new state
-                if (ConsulTestCases.testCases.containsKey(testCase)) {
-                    ConsulTestCases.testCases.get(testCase).loadState(this);
-                    sendHTTPResponse(exchange, testCase.getBytes());
-                } else {
-                    logger.log(Level.SEVERE, "Test case not found: " + testCase);
-                    sendHTTPResponse(exchange, ("Test case not found: " + testCase).getBytes());
-                }
-            });
             httpServer.start();
-            logger.log(Level.INFO, "Consul mock server started: " + this + scheme + "://" + this.host + ":" + this.port);
+            logger.log(Level.INFO, "Consul mock server started: " + this + scheme + "://" + host + ":" + this.port);
         } catch (Exception e) {
             logger.log(Level.SEVERE, "Error starting the consul mock server: ", e);
         }
+    }
+
+    private void createContextsForHttpServer(HttpServer httpServer){
+        String consulContext = "/v1/health/service/";
+        httpServer.createContext(consulContext, exchange -> {
+            System.out.println(exchange.getRequestURI());
+            Map<String, String> map = paramsAndQueryToMap(consulContext, exchange.getRequestURI().toString());
+            String serviceName = map.get("PATH_PARAM");
+            //dc=local-dc&passing=1
+            List<Node> resultNodes = get(serviceName);
+            if (map.containsKey("dc")) {
+                String dc = map.get("dc");
+                resultNodes = get(dc, serviceName);
+                if (map.containsKey("passing")) {
+                    resultNodes = get(dc, serviceName, true);
+                }
+            }
+            byte[] response = buildAllResultsToJsonArray(resultNodes).getBytes();
+            setHTTPResponseHeaders(exchange);
+            sendHTTPResponse(exchange, response);
+            exchange.getResponseBody().write(response);
+            exchange.close();
+
+        });
+        String testCaseLoadPath = "/tc/";
+        httpServer.createContext(testCaseLoadPath, exchange -> {
+            System.out.println(exchange.getRequestURI());
+            Map<String, String> map = paramsAndQueryToMap(testCaseLoadPath, exchange.getRequestURI().toString());
+            String testCase = map.get("PATH_PARAM");
+            //call methods to change consul server state
+            resetServer(); //reset the state before loading a new state
+            if (ConsulTestCases.testCases.containsKey(testCase)) {
+                ConsulTestCases.testCases.get(testCase).loadState(this);
+                sendHTTPResponse(exchange, testCase.getBytes());
+            } else {
+                logger.log(Level.SEVERE, "Test case not found: " + testCase);
+                sendHTTPResponse(exchange, ("Test case not found: " + testCase).getBytes());
+            }
+        });
     }
 
     /**
@@ -356,10 +371,10 @@ public class ConsulServer extends Thread {
     }
 
 
+    //todo remove this main method
     public static void main(String[] args) {
-        String hostAddress = "0.0.0.0";//127.0.0.1 isn't exposed to outside of docker
-        ConsulServer consulServer = new ConsulServer(hostAddress, 8500, "http");
-        consulServer.start();
-        ConsulTestCases.loadTestCases(); //load test cases
+        MockConsulServer consulServerHttp = new MockConsulServer(Constants.MOCK_CONSUL_SERVER_HTTPS_PORT, "https");
+        consulServerHttp.start();
+        ConsulTestCases.loadTestCases();
     }
 }

@@ -61,6 +61,9 @@ public class MockBackEndServer extends Thread {
             securedMockBackEndServer.start();
             mtlsMockBackEndServer.start();
         }
+        MockConsulServer consulServerHttp = new MockConsulServer("0.0.0.0", Constants.MOCK_CONSUL_SERVER_HTTP_PORT, "http");
+        consulServerHttp.start();
+        ConsulTestCases.loadTestCases();
     }
 
     public MockBackEndServer(int port) {
@@ -197,7 +200,7 @@ public class MockBackEndServer extends Thread {
         httpServer.stop(0);
     }
 
-    private SSLContext getSslContext() throws Exception {
+    public static SSLContext getSslContext() throws Exception {
 
         SSLContext sslContext = SSLContext.getInstance("TLS");
         // initialise the keystore

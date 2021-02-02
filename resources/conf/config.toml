@@ -13,7 +13,7 @@ password = "admin"
 # todo rumesh check whether we need to have certPath and KeyPath
 url = "https://169.254.1.1:8501" # scheme + host ip + port
 pollInterval = 5 # seconds
-aclTokenFilePath = ""
+aclTokenFilePath = "/home/wso2/security/consul/acltoken.txt"
 # certs for tls
 caCertPath = "/home/wso2/security/consul/consul-agent-ca.pem"
 certPath = "/home/wso2/security/consul/local-dc-client-consul-0.pem"

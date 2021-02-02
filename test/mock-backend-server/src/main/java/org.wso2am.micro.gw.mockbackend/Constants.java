@@ -25,4 +25,6 @@ public class Constants {
     public static final int SECURED_MOCK_BACKEND_SERVER_PORT = 2381;
     public static final int MTLS_MOCK_BACKEND_SERVER_PORT = 2382;
     public static final int MOCK_SANDBOX_SERVER_PORT = 2390;
+    public static final int MOCK_CONSUL_SERVER_HTTP_PORT = 8500;
+    public static final int MOCK_CONSUL_SERVER_HTTPS_PORT = 8501;
 }

@@ -27,7 +27,7 @@ public class ConsulHttpsTestCase extends BaseTestCase {
         File targetClassesDir = new File(ConsulTestCase.class.getProtectionDomain().getCodeSource().
                 getLocation().getPath());
         String configPath = targetClassesDir.toString() + File.separator + "conf" + File.separator +
-                "consul" + File.separator + "withhttps" + File.separator + "config.toml";
+                "consul" + File.separator + "https" + File.separator + "config.toml";
         super.startMGW(configPath);
         //mockConsulApis.yaml file should put to the resources/apis/openApis folder
         String apiZipfile = ApiProjectGenerator.createApictlProjZip("apis/openApis/mockConsulApis.yaml");
@@ -54,7 +54,7 @@ public class ConsulHttpsTestCase extends BaseTestCase {
         String requestUrl = mockConsulHttpsServerURL + ConsulTestCase.testCaseContext + testCaseName;
         System.out.println(requestUrl);
         HttpResponse tcResp = HttpsClientRequest.doGet(requestUrl);
-        Assert.assertTrue(tcResp.getData().contains(testCaseName), "test case loaded");
+        Assert.assertTrue(tcResp.getData().contains(testCaseName), "test case not loaded");
         ConsulTestCase.checkFirstTestCase();
     }
 

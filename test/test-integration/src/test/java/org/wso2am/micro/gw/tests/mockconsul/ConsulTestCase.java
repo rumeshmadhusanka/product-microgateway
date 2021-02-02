@@ -44,7 +44,7 @@ public class ConsulTestCase extends BaseTestCase {
         File targetClassesDir = new File(ConsulTestCase.class.getProtectionDomain().getCodeSource().
                 getLocation().getPath());
         String configPath = targetClassesDir.toString() + File.separator + "conf" + File.separator +
-                "consul" + File.separator + "withhttp" + File.separator + "config.toml";
+                "consul" + File.separator + "http" + File.separator + "config.toml";
         super.startMGW(configPath);
         //mockConsulApis.yaml file should put to the resources/apis/openApis folder
         String apiZipfile = ApiProjectGenerator.createApictlProjZip("apis/openApis/mockConsulApis.yaml");
@@ -65,9 +65,10 @@ public class ConsulTestCase extends BaseTestCase {
     }
 
 
+    //Used in HTTPS test case too
     protected static void checkFirstTestCase() throws InterruptedException, IOException {
         //wait till the adapter picks up the change and update the router
-        TimeUnit.SECONDS.sleep(pollInterval*2L + 2);
+        TimeUnit.SECONDS.sleep(pollInterval * 2L + 2);
         //get router's config
         HttpResponse response = HttpClientRequest.doGet(routerConfigDumpURL, new HashMap<>());
         String assertStr = "This data should be loaded according to syntax parse";
@@ -77,14 +78,16 @@ public class ConsulTestCase extends BaseTestCase {
         Assert.assertFalse(response.getData().contains("5001"), "Default host should be removed");
         Assert.assertFalse(response.getData().contains("6000"), "Only selected tags should be loaded to config");
         Assert.assertFalse(response.getData().contains("7000"), "Health check critical nodes should be removed");
-        Assert.assertFalse(response.getData().contains("5000"), "Only nodes corresponding to selected service should be loaded");
+        Assert.assertFalse(response.getData().contains("5000"), "Only nodes corresponding to selected service " +
+                "should be loaded");
     }
+
     @Test(description = "Connect to consul server")
     public void consulLoadConfigToRouterTest() throws IOException, InterruptedException {
         String testCaseName = "1";
         //load the test case data to the consul mock server
-        HttpResponse tcResp = HttpClientRequest.doGet(mockConsulServerURL + testCaseContext + testCaseName, new HashMap<>());
-        Assert.assertTrue(tcResp.getData().toString().contains(testCaseName),"test case loaded");
+        HttpResponse tcResp = HttpClientRequest.doGet(mockConsulServerURL + testCaseContext + testCaseName);
+        Assert.assertTrue(tcResp.getData().contains(testCaseName), "test case loaded");
         checkFirstTestCase();
     }
 
@@ -92,15 +95,15 @@ public class ConsulTestCase extends BaseTestCase {
     public void consulReflectChange() throws IOException, InterruptedException {
         String testCaseName = "2";
         //load the first test case state
-        HttpClientRequest.doGet(mockConsulServerURL + testCaseContext + "1", new HashMap<>());
+        HttpClientRequest.doGet(mockConsulServerURL + testCaseContext + "1");
         //wait till the adapter picks up the change and update the router
         TimeUnit.SECONDS.sleep(pollInterval + 2);
         //load the current test case data to the consul mock server
-        HttpClientRequest.doGet(mockConsulServerURL + testCaseContext + testCaseName, new HashMap<>());
+        HttpClientRequest.doGet(mockConsulServerURL + testCaseContext + testCaseName);
         //wait till the adapter picks up the change and update the router
         TimeUnit.SECONDS.sleep(pollInterval + 2);
         //get router's config
-        HttpResponse response = HttpClientRequest.doGet(routerConfigDumpURL, new HashMap<>());
+        HttpResponse response = HttpClientRequest.doGet(routerConfigDumpURL);
         String assertStr = "This data should be loaded according to syntax parse";
         Assert.assertTrue(response.getData().contains("3000"), assertStr);
         Assert.assertTrue(response.getData().contains("8080"), assertStr);
@@ -117,13 +120,13 @@ public class ConsulTestCase extends BaseTestCase {
     public void consulServerDown() throws IOException, InterruptedException {
         String testCaseName = "3";
         //load the first state
-        HttpClientRequest.doGet(mockConsulServerURL + testCaseContext + "1", new HashMap<>());
+        HttpClientRequest.doGet(mockConsulServerURL + testCaseContext + "1");
         //wait till the adapter picks up the change and update the router
         TimeUnit.SECONDS.sleep(pollInterval + 2);
 
-        HttpClientRequest.doGet(mockConsulServerURL + testCaseContext + testCaseName, new HashMap<>());
+        HttpClientRequest.doGet(mockConsulServerURL + testCaseContext + testCaseName);
         //get router's config
-        HttpResponse response = HttpClientRequest.doGet(routerConfigDumpURL, new HashMap<>());
+        HttpResponse response = HttpClientRequest.doGet(routerConfigDumpURL);
         TimeUnit.SECONDS.sleep(pollInterval * 2L + 2);
         //router config should be equal to the first state
         String assertStr = "This data should be loaded according to syntax parse";

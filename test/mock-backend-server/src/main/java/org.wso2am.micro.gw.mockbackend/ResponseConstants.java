@@ -41,6 +41,14 @@ public class ResponseConstants {
     public static final String API_SANDBOX_RESPONSE = "{\"id\":111111155, \"category\":{ \"id\":0, \"name\":\"ABCD\" }," +
             " \"name\":\"doggieUpdated\", \"photoUrls\":[ \"SampleImage1.png\" ], \"tags\":[ { \"id\":0, " +
             "\"name\":\"TestTag1\" } ], \"status\":\"pending\"}";
+    public static final String CONSUL_UPSTREAM_1_RESPONSE = "{\n" +
+            "  \"message\": \"from consul upstream\",\n" +
+            "  \"upstream\": 1\n" +
+            "}";
+    public static final String CONSUL_UPSTREAM_2_RESPONSE = "{\n" +
+            "  \"message\": \"from consul upstream\",\n" +
+            "  \"upstream\": 2\n" +
+            "}";
 
 
     public static final String AUTHENTICATION_FAILURE_RESPONSE = "{\"fault\":\"Authorization credentials are not " +

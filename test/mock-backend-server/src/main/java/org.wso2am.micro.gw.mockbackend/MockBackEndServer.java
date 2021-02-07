@@ -62,14 +62,16 @@ public class MockBackEndServer extends Thread {
             mtlsMockBackEndServer.start();
         }
 
-        //for mock consul
+        //for mocking consul
+        //connect to consul via http, endpoints are http
         MockConsulServer consulServerHttp = new MockConsulServer(Constants.MOCK_CONSUL_SERVER_HTTP_PORT,
                 "http");
+        //connect to consul via https, endpoints are https
         MockConsulServer consulServerHttps = new MockConsulServer(Constants.MOCK_CONSUL_SERVER_HTTPS_PORT,
                 "https");
         consulServerHttp.start();
         consulServerHttps.start();
-        ConsulTestCases.loadTestCases();
+        ConsulServerState.loadStates();
     }
 
     public MockBackEndServer(int port) {
@@ -193,6 +195,15 @@ public class MockBackEndServer extends Thread {
                 exchange.getResponseBody().write(response);
                 exchange.close();
             });
+            httpServer.createContext(context + "/user/logout", exchange -> {
+                byte[] response = "".getBytes();
+                exchange.getResponseHeaders().set(Constants.CONTENT_TYPE,
+                        Constants.CONTENT_TYPE_APPLICATION_JSON);
+                exchange.sendResponseHeaders(HttpURLConnection.HTTP_OK, response.length);
+                exchange.getResponseBody().write(response);
+                exchange.close();
+            });
+
 
             httpServer.start();
             backEndServerUrl = "http://localhost:" + backEndServerPort;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, WSO2 Inc. (http://www.wso2.org) All Rights Reserved.
+ * Copyright (c) 2021, WSO2 Inc. (http://www.wso2.org) All Rights Reserved.
  *
  * WSO2 Inc. licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
@@ -19,6 +19,7 @@
 package org.wso2am.micro.gw.mockbackend;
 
 import com.sun.net.httpserver.*;
+import org.apache.commons.text.StringSubstitutor;
 
 import javax.net.ssl.*;
 import java.io.IOException;
@@ -35,102 +36,113 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * ConsulServer starts an HTTP server to mock the behaviour of a Consul Client/Server
+ * ConsulServer starts an HTTP server to mock the behaviour of a Consul Client/Server.
  */
 public class MockConsulServer extends Thread {
     private static final Logger logger = Logger.getLogger(MockConsulServer.class.getName());
     private final int port;
     private final String scheme; //http, https
-    private List<Node> nodes = new ArrayList<>(); //list of service nodes
-    private final Map<String, String> responseHeaders = new HashMap<>();
+    private List<Upstream> upstreams = new ArrayList<>(); //list of service nodes
     private HttpServer httpServer;
 
 
+    /**
+     * Instantiates a new Mock consul server.
+     *
+     * @param port   the port
+     * @param scheme the scheme
+     */
     public MockConsulServer(int port, String scheme) {
         this.port = port;
         this.scheme = scheme;
-
-        responseHeaders.put("Content-Type", "application/json");
-        responseHeaders.put("Vary", "Accept-Encoding");
-        responseHeaders.put("X-Consul-Default-Acl-Policy", "allow");
-        responseHeaders.put("X-Consul-Effective-Consistency", "leader");
-        responseHeaders.put("X-Consul-Index", "101");
-        responseHeaders.put("X-Consul-Knownleader", "true");
-        responseHeaders.put("X-Consul-Lastcontact", "0");
     }
 
-
-    public void addNode(Node node) {
-        nodes.add(node);
+//todo remove this main method
+    public static void main(String[] args) {
+        MockConsulServer consulServerHttp = new MockConsulServer(Constants.MOCK_CONSUL_SERVER_HTTP_PORT, "http");
+        consulServerHttp.start();
+        MockConsulServer consulServerHttps = new MockConsulServer(Constants.MOCK_CONSUL_SERVER_HTTPS_PORT,
+                "https");
+        consulServerHttps.start();
+        ConsulServerState.loadStates();
     }
 
+    /**
+     * Add node.
+     *
+     * @param upstream the node
+     */
+    public void addUpstream(Upstream upstream) {
+        upstreams.add(upstream);
+    }
+
+    /**
+     * Reset server.
+     */
     public void resetServer() {
-        nodes = new ArrayList<>();
+        upstreams = new ArrayList<>();
     }
 
+    /**
+     * Stop server.
+     */
     public void stopServer() {
         httpServer.stop(0);
     }
 
     /**
-     * Filters the available nodes by service name, datacenter and health check status
+     * Filters the available nodes by service name, datacenter and health check status.
      *
      * @param datacenter          name of the datacenter
      * @param serviceName         name of the Service
      * @param healthChecksPassing status of health check
      * @return List of Nodes matching the criteria
      */
-    public List<Node> get(String datacenter, String serviceName, boolean healthChecksPassing) {
-        List<Node> nodes = new ArrayList<>();
-        for (Node node : get(datacenter, serviceName)) {
-            if (healthChecksPassing == node.getHealthCheck().isPassing()) {
-                nodes.add(node);
+    public List<Upstream> get(String datacenter, String serviceName, boolean healthChecksPassing) {
+        List<Upstream> upstreams = new ArrayList<>();
+        for (Upstream upstream : get(datacenter, serviceName)) {
+            if (healthChecksPassing == upstream.getHealthCheck().isPassing()) {
+                upstreams.add(upstream);
             }
         }
-        return nodes;
+        return upstreams;
     }
 
     /**
-     * Filters the available nodes by service name and datacenter
+     * Filters the available nodes by service name and datacenter.
      *
      * @param datacenter  name of the datacenter
      * @param serviceName name of the Service
      * @return List of Nodes matching the criteria
-     * @see #get(String)
-     * @see #get(String, String, boolean)
+     * @see #get(String) #get(String)
+     * @see #get(String, String, boolean) #get(String, String, boolean)
      */
-    public List<Node> get(String datacenter, String serviceName) {
-        List<Node> ret = new ArrayList<>();
-        for (Node node : get(serviceName)) {
-            if (node.getDatacenter().getName().equals(datacenter)) {
-                ret.add(node);
+    public List<Upstream> get(String datacenter, String serviceName) {
+        List<Upstream> ret = new ArrayList<>();
+        for (Upstream upstream : get(serviceName)) {
+            if (upstream.getDatacenter().getName().equals(datacenter)) {
+                ret.add(upstream);
             }
         }
         return ret;
     }
 
     /**
-     * Filters the available nodes by service name
+     * Filters the available nodes by service name.
      *
      * @param serviceName name of the Service
      * @return List of Nodes matching the criteria
-     * @see #get(String, String)
-     * @see #get(String, String, boolean)
+     * @see #get(String, String) #get(String, String)
+     * @see #get(String, String, boolean) #get(String, String, boolean)
      */
-    public List<Node> get(String serviceName) {
-        List<Node> ret = new ArrayList<>();
-        for (Node node : nodes) {
-            if (node.getService().getName().equals(serviceName)) {
-                ret.add(node);
+    public List<Upstream> get(String serviceName) {
+        List<Upstream> ret = new ArrayList<>();
+        for (Upstream upstream : upstreams) {
+            if (upstream.getService().getName().equals(serviceName)) {
+                ret.add(upstream);
             }
         }
         return ret;
-    }
-
-    private void setHTTPResponseHeaders(HttpExchange exchange) {
-        for (String k : responseHeaders.keySet()) {
-            exchange.getResponseHeaders().set(k, responseHeaders.get(k));
-        }
     }
 
     private void sendHTTPResponse(HttpExchange exchange, byte[] response) throws IOException {
@@ -174,13 +186,13 @@ public class MockConsulServer extends Thread {
     }
 
     /**
-     * Creates a JSON String for a given Node
+     * Creates a JSON String for a given Node.
      *
-     * @param node Node which the JSON for response is created.
+     * @param upstream Node which the JSON for response is created.
      * @return String JSON for the response.
      */
-    private String buildJsonForNode(Node node) {
-        System.out.println(node);
+    private String buildJsonForNode(Upstream upstream) {
+        System.out.println(upstream);
         String jsonTemplate = "{\n" +
                 "        \"Node\": {\n" +
                 "            \"ID\": \"${nodeId}\",\n" +
@@ -228,7 +240,8 @@ public class MockConsulServer extends Thread {
                 "                \"Name\": \"health check on 3000\",\n" +
                 "                \"Status\": \"${healthStatus}\",\n" +
                 "                \"Notes\": \"\",\n" +
-                "                \"Output\": \"Get \\\"http://localhost:3000\\\": dial tcp 127.0.0.1:3000: connect: connection refused\",\n" +
+                "                \"Output\": \"Get \\\"http://localhost:3000\\\": dial tcp 127.0.0.1:3000: connect:" +
+                " connection refused\",\n" +
                 "                \"ServiceID\": \"3000l\",\n" +
                 "                \"ServiceName\": \"web\",\n" +
                 "                \"ServiceTags\": [\n" +
@@ -241,35 +254,20 @@ public class MockConsulServer extends Thread {
                 "            }\n" +
                 "        ]\n" +
                 "    },";
-
-        //todo replace string variables with: org.apache.commons.text.StringSubstitutor
-        //<dependency>
-        //   <groupId>org.apache.commons</groupId>
-        //   <artifactId>commons-text</artifactId>
-        //   <version>1.9</version>
-        //</dependency>
-        jsonTemplate = jsonTemplate.replace("${nodeId}", node.getConsulNode().getNodeId());
-        jsonTemplate = jsonTemplate.replace("${nodeName}", node.getConsulNode().getNodeName());
-        jsonTemplate = jsonTemplate.replace("${nodeName}", node.getConsulNode().getNodeName());
-        jsonTemplate = jsonTemplate.replace("${datacenter}", node.getDatacenter().getName());
-
-        jsonTemplate = jsonTemplate.replace("${consulNodeAddress}", node.getConsulNode().getAddress());
-        jsonTemplate = jsonTemplate.replace("${consulNodeAddress}", node.getConsulNode().getAddress());
-        jsonTemplate = jsonTemplate.replace("${consulNodeAddress}", node.getConsulNode().getAddress());
-        jsonTemplate = jsonTemplate.replace("${consulNodeAddress}", node.getConsulNode().getAddress());
-        jsonTemplate = jsonTemplate.replace("${consulNodeAddress}", node.getConsulNode().getAddress());
-
-        jsonTemplate = jsonTemplate.replace("${address}", node.getAddress());
-
-        jsonTemplate = jsonTemplate.replace("${createIndex}", "50");
-        jsonTemplate = jsonTemplate.replace("${createIndex}", "52");
-        jsonTemplate = jsonTemplate.replace("${serviceId}", node.getId());
-        jsonTemplate = jsonTemplate.replace("${serviceName}", node.getService().getName());
-        jsonTemplate = jsonTemplate.replace("${port}", Integer.toString(node.getPort()));
-        jsonTemplate = jsonTemplate.replace("${tag}", node.getTags()[0]);
-        jsonTemplate = jsonTemplate.replace("${healthStatus}", node.getHealthCheck().getStatus());
-
-        return jsonTemplate;
+        Map<String, String> substitutes = new HashMap<>();
+        substitutes.put("nodeId", upstream.getConsulNode().getNodeId());
+        substitutes.put("nodeName", upstream.getConsulNode().getNodeName());
+        substitutes.put("datacenter", upstream.getDatacenter().getName());
+        substitutes.put("consulNodeAddress", upstream.getConsulNode().getAddress());
+        substitutes.put("address", upstream.getAddress());
+        substitutes.put("createIndex", "50");
+        substitutes.put("serviceId", upstream.getId());
+        substitutes.put("serviceName", upstream.getService().getName());
+        substitutes.put("port", Integer.toString(upstream.getPort()));
+        substitutes.put("tag", upstream.getTags()[0]);
+        substitutes.put("healthStatus", upstream.getHealthCheck().getStatus());
+        StringSubstitutor substitutor = new StringSubstitutor(substitutes);
+        return substitutor.replace(jsonTemplate);
     }
 
     /**
@@ -280,7 +278,6 @@ public class MockConsulServer extends Thread {
     @Override
     public void run() {
         try {
-            //localhost
             String host = "0.0.0.0";
             if (scheme.equals("https")) { //https
                 this.httpServer = HttpsServer.create(new InetSocketAddress(host, port), 0);
@@ -290,7 +287,8 @@ public class MockConsulServer extends Thread {
                 SSLContext sslContext = SSLContext.getInstance(tlsVersion);
                 // initialise the keystore
                 KeyStore keyStore = KeyStore.getInstance("JKS");
-                InputStream keyStoreIS = Thread.currentThread().getContextClassLoader().getResourceAsStream("wso2carbon.jks");
+                InputStream keyStoreIS = Thread.currentThread().getContextClassLoader()
+                        .getResourceAsStream("wso2carbon.jks");
                 keyStore.load(keyStoreIS, password);
                 // setup the key manager factory
                 KeyManagerFactory kmf = KeyManagerFactory.getInstance("SunX509");
@@ -330,7 +328,8 @@ public class MockConsulServer extends Thread {
             createContextsForHttpServer(httpServer);
 
             httpServer.start();
-            logger.log(Level.INFO, "Consul mock server started: " + this + scheme + "://" + host + ":" + this.port);
+            logger.log(Level.INFO, "Consul mock server started: " + this + scheme + "://" + host +
+                    ":" + this.port);
         } catch (Exception e) {
             logger.log(Level.SEVERE, "Error starting the consul mock server: ", e);
         }
@@ -343,30 +342,29 @@ public class MockConsulServer extends Thread {
             Map<String, String> map = paramsAndQueryToMap(consulContext, exchange.getRequestURI().toString());
             String serviceName = map.get("PATH_PARAM");
             //dc=local-dc&passing=1
-            List<Node> resultNodes = get(serviceName);
+            List<Upstream> resultUpstreams = get(serviceName);
             if (map.containsKey("dc")) {
                 String dc = map.get("dc");
-                resultNodes = get(dc, serviceName);
+                resultUpstreams = get(dc, serviceName);
                 if (map.containsKey("passing")) {
-                    resultNodes = get(dc, serviceName, true);
+                    resultUpstreams = get(dc, serviceName, true);
                 }
             }
-            byte[] response = buildAllResultsToJsonArray(resultNodes).getBytes();
-            setHTTPResponseHeaders(exchange);
+            byte[] response = buildAllResultsToJsonArray(resultUpstreams).getBytes();
             sendHTTPResponse(exchange, response);
             exchange.getResponseBody().write(response);
             exchange.close();
 
         });
-        String testCaseLoadPath = "/tc/";
-        httpServer.createContext(testCaseLoadPath, exchange -> {
+        String stateLoadPath = "/status/";
+        httpServer.createContext(stateLoadPath, exchange -> {
             System.out.println(exchange.getRequestURI());
-            Map<String, String> map = paramsAndQueryToMap(testCaseLoadPath, exchange.getRequestURI().toString());
+            Map<String, String> map = paramsAndQueryToMap(stateLoadPath, exchange.getRequestURI().toString());
             String testCase = map.get("PATH_PARAM");
             //call methods to change consul server state
             resetServer(); //reset the state before loading a new state
-            if (ConsulTestCases.testCases.containsKey(testCase)) {
-                ConsulTestCases.testCases.get(testCase).loadState(this);
+            if (ConsulServerState.states.containsKey(testCase)) {
+                ConsulServerState.states.get(testCase).loadState(this);
                 sendHTTPResponse(exchange, testCase.getBytes());
             } else {
                 logger.log(Level.SEVERE, "Test case not found: " + testCase);
@@ -376,29 +374,19 @@ public class MockConsulServer extends Thread {
     }
 
     /**
-     * Gives the output JSON array to the given set of Nodes
+     * Gives the output JSON array to the given set of Nodes.
      *
-     * @param nodeArrayList List of Nodes
+     * @param upstreamArrayList List of Nodes
      * @return String JSON array
      */
-    private String buildAllResultsToJsonArray(List<Node> nodeArrayList) {
+    private String buildAllResultsToJsonArray(List<Upstream> upstreamArrayList) {
         StringBuilder sb = new StringBuilder();
-        for (Node node : nodeArrayList) {
-            sb.append(this.buildJsonForNode(node));
+        for (Upstream upstream : upstreamArrayList) {
+            sb.append(this.buildJsonForNode(upstream));
         }
         sb.setLength(sb.length() - 1); // remove the trailing ","
         sb.insert(0, "[");
         sb.append("]");
         return sb.toString();
-    }
-
-
-    //todo remove this main method
-    public static void main(String[] args) {
-        MockConsulServer consulServerHttp = new MockConsulServer(Constants.MOCK_CONSUL_SERVER_HTTP_PORT, "http");
-        consulServerHttp.start();
-        MockConsulServer consulServerHttps = new MockConsulServer(Constants.MOCK_CONSUL_SERVER_HTTPS_PORT, "https");
-        consulServerHttps.start();
-        ConsulTestCases.loadTestCases();
     }
 }

@@ -20,6 +20,7 @@ WORKDIR /home/app
 
 EXPOSE 23823
 # for mock consul
+# need to change mock Consul's state during tests
 EXPOSE 8500
 EXPOSE 8501
 

@@ -35,11 +35,13 @@ import java.util.concurrent.TimeUnit;
 
 public class ConsulTestCase extends BaseTestCase {
     public static int pollInterval = 5; //seconds
-    public static final String mockConsulServerURL = "http://localhost:8500";
-    public static final String routerConfigDumpURL = "http://localhost:9000/config_dump";
-    public static final String testCaseContext = "/tc/";
+    public static final String mockConsulServerURL = "http://localhost:8500"; //exposed to the host server
+    public static final String routerConfigDumpURL = "http://localhost:9000/config_dump"; //exposed to the host server
+    public static final String statusContext = "/status/"; //loading consul status to mockConsul server
+    public static final String upstreamDefaultHost = "5001";
+    public static final String mockBackendServerPort = "";
 
-    @BeforeClass(description = "initialise a mock consul server")
+    @BeforeClass(description = "initialise the mgw pack")
     void start() throws Exception {
         File targetClassesDir = new File(ConsulTestCase.class.getProtectionDomain().getCodeSource().
                 getLocation().getPath());
@@ -59,18 +61,17 @@ public class ConsulTestCase extends BaseTestCase {
         Assert.assertEquals(response.getResponseCode(), HttpStatus.SC_OK, "Response code mismatched");
     }
 
-    @AfterClass(description = "stop the mock consul server")
+    @AfterClass(description = "stop the mgw pack")
     void stop() {
         super.stopMGW();
     }
-
 
     //Used in HTTPS test case too
     protected static void checkFirstTestCase() throws InterruptedException, IOException {
         //wait till the adapter picks up the change and update the router
         TimeUnit.SECONDS.sleep(pollInterval * 2L + 2);
         //get router's config
-        HttpResponse response = HttpClientRequest.doGet(routerConfigDumpURL, new HashMap<>());
+        HttpResponse response = HttpClientRequest.doGet(routerConfigDumpURL);
         String assertStr = "This data should be loaded according to syntax parse";
         Assert.assertTrue(response.getData().contains("3000"), assertStr);
         Assert.assertTrue(response.getData().contains("8080"), assertStr);
@@ -78,28 +79,51 @@ public class ConsulTestCase extends BaseTestCase {
         Assert.assertFalse(response.getData().contains("5001"), "Default host should be removed");
         Assert.assertFalse(response.getData().contains("6000"), "Only selected tags should be loaded to config");
         Assert.assertFalse(response.getData().contains("7000"), "Health check critical nodes should be removed");
-        Assert.assertFalse(response.getData().contains("5000"), "Only nodes corresponding to selected service " +
-                "should be loaded");
+        Assert.assertFalse(response.getData().contains("5000"), "Only nodes corresponding to selected service "
+                + "should be loaded");
     }
 
-    @Test(description = "Connect to consul server")
-    public void consulLoadConfigToRouterTest() throws IOException, InterruptedException {
-        String testCaseName = "1";
-        //load the test case data to the consul mock server
-        HttpResponse tcResp = HttpClientRequest.doGet(mockConsulServerURL + testCaseContext + testCaseName);
-        Assert.assertTrue(tcResp.getData().contains(testCaseName), "test case loaded");
-        checkFirstTestCase();
+    @Test(description = "Remove default host")
+    public void removeDefaultHost() throws IOException, InterruptedException {
+        String consulServerState = "1";
+        //load the state to the mock consul server
+        HttpResponse loadStateResponse = HttpClientRequest.doGet(mockConsulServerURL + statusContext
+                + consulServerState);
+        //response contains the consulServerState
+        Assert.assertTrue(loadStateResponse.getData().contains(consulServerState), "Mock Consul server state failed to load");
+        //wait till the adapter picks up the change and update the router
+        TimeUnit.SECONDS.sleep(pollInterval * 2L + 2);
+        HttpResponse response = HttpClientRequest.doGet(routerConfigDumpURL);
+        Assert.assertFalse(response.getData().contains(upstreamDefaultHost), "Default host has not removed");
     }
+
+    @Test(description = "Load upstreams into router config")
+    public void loadConsulUpstreams() throws IOException, InterruptedException {
+        String consulServerState = "1";
+        //load the test case data to the consul mock server
+        HttpResponse loadStateResponse = HttpClientRequest.doGet(mockConsulServerURL + statusContext
+                + consulServerState);
+        //response contains the consulServerState
+        Assert.assertTrue(loadStateResponse.getData().contains(consulServerState), "Mock Consul server state failed to load");
+        //wait till the adapter picks up the change and update the router
+        TimeUnit.SECONDS.sleep(pollInterval * 2L + 2);
+        HttpResponse response = HttpClientRequest.doGet(routerConfigDumpURL);
+        //sandbox resource level
+        Assert.assertTrue(response.getData().contains("3000"), "");
+        //production API level
+
+    }
+
 
     @Test(description = "Change in consul config/Health check fail reflects in router")
     public void consulReflectChange() throws IOException, InterruptedException {
-        String testCaseName = "2";
+        String consulServerState = "2";
         //load the first test case state
-        HttpClientRequest.doGet(mockConsulServerURL + testCaseContext + "1");
+        HttpClientRequest.doGet(mockConsulServerURL + statusContext + "1");
         //wait till the adapter picks up the change and update the router
         TimeUnit.SECONDS.sleep(pollInterval + 2);
         //load the current test case data to the consul mock server
-        HttpClientRequest.doGet(mockConsulServerURL + testCaseContext + testCaseName);
+        HttpClientRequest.doGet(mockConsulServerURL + statusContext + consulServerState);
         //wait till the adapter picks up the change and update the router
         TimeUnit.SECONDS.sleep(pollInterval + 2);
         //get router's config
@@ -116,15 +140,15 @@ public class ConsulTestCase extends BaseTestCase {
                 "should be loaded");
     }
 
-    @Test(description = "Consul server is not reachable")
+    @Test(description = "Consul server becomes unreachable, router state should not be changed")
     public void consulServerDown() throws IOException, InterruptedException {
-        String testCaseName = "3";
+        String consulServerState = "3";
         //load the first state
-        HttpClientRequest.doGet(mockConsulServerURL + testCaseContext + "1");
+        HttpClientRequest.doGet(mockConsulServerURL + statusContext + "1");
         //wait till the adapter picks up the change and update the router
         TimeUnit.SECONDS.sleep(pollInterval + 2);
 
-        HttpClientRequest.doGet(mockConsulServerURL + testCaseContext + testCaseName);
+        HttpClientRequest.doGet(mockConsulServerURL + statusContext + consulServerState);
         //get router's config
         HttpResponse response = HttpClientRequest.doGet(routerConfigDumpURL);
         TimeUnit.SECONDS.sleep(pollInterval * 2L + 2);

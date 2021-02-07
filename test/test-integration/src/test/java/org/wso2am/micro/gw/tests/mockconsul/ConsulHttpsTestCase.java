@@ -9,13 +9,8 @@ import org.testng.annotations.Test;
 import org.wso2am.micro.gw.tests.common.BaseTestCase;
 import org.wso2am.micro.gw.tests.util.*;
 
-import javax.net.ssl.HttpsURLConnection;
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.net.MalformedURLException;
-import java.net.URL;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -51,7 +46,7 @@ public class ConsulHttpsTestCase extends BaseTestCase {
     public void consulLoadConfigToRouterTest() throws IOException, InterruptedException {
         String testCaseName = "1";
         //load the test case data to the consul mock server
-        String requestUrl = mockConsulHttpsServerURL + ConsulTestCase.testCaseContext + testCaseName;
+        String requestUrl = mockConsulHttpsServerURL + ConsulTestCase.statusContext + testCaseName;
         System.out.println(requestUrl);
         HttpResponse tcResp = HttpsClientRequest.doGet(requestUrl);
         Assert.assertTrue(tcResp.getData().contains(testCaseName), "test case not loaded");
